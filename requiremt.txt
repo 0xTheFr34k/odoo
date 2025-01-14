@@ -1,2 +1,4 @@
 selenium
 openpyxl
+openai
+openai==0.28

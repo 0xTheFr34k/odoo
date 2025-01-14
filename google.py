@@ -9,7 +9,7 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 import openai
 
-openai.api_key = "change me to api key"
+openai.api_key = "change me"
 
 def collect_social_media_accounts(websites):
     """
@@ -23,7 +23,6 @@ def collect_social_media_accounts(websites):
         dict: A dictionary containing lists of social media accounts grouped by platform.
     """
     if websites == "غير موجود":
-        print("No websites found.")
         return {
             "facebook": [],
             "instagram": [],
@@ -52,7 +51,6 @@ def collect_social_media_accounts(websites):
         try:
             print(f"Fetching social media for: {website}")
             response = get_social_media(website)
-            print(response)
             try:
                 response = json.loads(response)
             except:
@@ -64,11 +62,9 @@ def collect_social_media_accounts(websites):
                     if account and platform in aggregated_accounts:
                         aggregated_accounts[platform].append(account)
             else:
-                # print(f"No social media accounts found for {website}.")
                 pass
         
         except Exception as e:
-            # print(f"Error processing website {website}: {str(e)}")
             pass
 
     # Remove duplicates from each list
@@ -95,7 +91,7 @@ def read_company_names(file_path):
 def setup_driver():
     """Sets up and returns the WebDriver."""
     chrome_options = Options()
-    chrome_options.add_argument("--headless")  # Uncomment for headless mode
+    #chrome_options.add_argument("--headless")  # Uncomment for headless mode
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
@@ -145,8 +141,8 @@ def get_social_media(url):
     Queries OpenAI to get social media accounts for the given URL.
     """
     prompt = f"""
-    Please provide official social media accounts (Twitter, Facebook, LinkedIn, Instagram,snapchat,other) for the company with the URL "{url}".
-    Only include verified accounts if they exist. If no official accounts are found, respond in the following JSON format:
+    Please provide official social media accounts (Twitter, Facebook, LinkedIn, Instagram, Snapchat, Other) for the company with the URL "{url}".
+    If no accounts are found, respond in the following JSON format:
     {{
         "company_url": "{url}",
         "social_media": {{
@@ -185,7 +181,6 @@ def main():
     scraped_data = []
     
     try:
-        i : int = 1
         workbook = openpyxl.load_workbook(file_path)
         sheet = workbook.active
         company_names = []

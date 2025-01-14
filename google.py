@@ -7,6 +7,79 @@ from selenium.webdriver.chrome.options import Options
 import json
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
+import openai
+
+openai.api_key = "change me to api key"
+
+def collect_social_media_accounts(websites):
+    """
+    Processes a list of websites, fetches social media accounts for each, and
+    returns aggregated lists for each platform.
+
+    Args:
+        websites (str): A string containing websites separated by newlines.
+
+    Returns:
+        dict: A dictionary containing lists of social media accounts grouped by platform.
+    """
+    if websites == "غير موجود":
+        print("No websites found.")
+        return {
+            "facebook": [],
+            "instagram": [],
+            "twitter": [],
+            "linkedin": [],
+            "snapchat": [],
+            "other": []
+        }
+
+    # Split websites, remove duplicates, and clean up entries
+    unique_websites = list(set(websites.split('\n')))
+    
+    # Initialize aggregated results
+    aggregated_accounts = {
+        "facebook": [],
+        "instagram": [],
+        "twitter": [],
+        "linkedin": [],
+        "snapchat": [],
+        "other": []
+    }
+
+    for website in unique_websites:
+        if website is None:
+            continue
+        try:
+            print(f"Fetching social media for: {website}")
+            response = get_social_media(website)
+            print(response)
+            try:
+                response = json.loads(response)
+            except:
+                response = {}
+            
+            if "social_media" in response:
+                social_media = response["social_media"]
+                for platform, account in social_media.items():
+                    if account and platform in aggregated_accounts:
+                        aggregated_accounts[platform].append(account)
+            else:
+                # print(f"No social media accounts found for {website}.")
+                pass
+        
+        except Exception as e:
+            # print(f"Error processing website {website}: {str(e)}")
+            pass
+
+    # Remove duplicates from each list
+    for platform in aggregated_accounts:
+        aggregated_accounts[platform] = list(set(aggregated_accounts[platform]))
+
+    return aggregated_accounts
+
+
+# Example Usage
+
 
 def read_company_names(file_path):
     """Reads company names from the Excel file."""
@@ -22,7 +95,7 @@ def read_company_names(file_path):
 def setup_driver():
     """Sets up and returns the WebDriver."""
     chrome_options = Options()
-    # chrome_options.add_argument("--headless")  # Uncomment for headless mode
+    chrome_options.add_argument("--headless")  # Uncomment for headless mode
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--no-sandbox")
     chrome_options.add_argument("--disable-dev-shm-usage")
@@ -50,11 +123,12 @@ def extract_related_business(driver):
         elif "phone:tel" in item_id:
             related_business["phone"] = text.split('\n')[1]
         elif "authority" in item_id:
-            url = text.split('\n')[1]
-            # if 'instagram' not in url and 'facebook' not in url and 'goo.gl' not in url:
-            if url not in ['instagram' , 'facebook' , 'goo.gl', 'site.google.com']:
-                input("wait")
+            if "instagram" in text:
+                related_business['url'] = None
+            else:
                 related_business["url"] = text.split('\n')[1]
+            print("here >")
+            print(related_business["url"])
     return related_business
 
 def save_to_json(data, file_name):
@@ -68,6 +142,38 @@ def save_to_xls(data, file_name):
     ws = wb.active
     pass
 
+def get_social_media(url):
+    """
+    Queries OpenAI to get social media accounts for the given URL.
+    """
+    prompt = f"""
+    Please provide official social media accounts (Twitter, Facebook, LinkedIn, Instagram,snapchat,other) for the company with the URL "{url}".
+    Only include verified accounts if they exist. If no official accounts are found, respond in the following JSON format:
+    {{
+        "company_url": "{url}",
+        "social_media": {{
+            "twitter": null,
+            "facebook": null,
+            "linkedin": null,
+            "instagram": null,
+            "snapchat": null,
+            "other": null
+        }}
+    }}
+    """
+    try:
+        response = openai.ChatCompletion.create(
+            model="gpt-4",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return response['choices'][0]['message']['content']
+    except Exception as e:
+        return {
+            "company_url": url,
+            "error": f"Error fetching data: {str(e)}"
+        }
+
+
 
 def main():
     file_path = "sample.xlsx"
@@ -76,19 +182,18 @@ def main():
     scraped_data = []
     
     try:
-        # i : int = 1
+        i : int = 1
         workbook = openpyxl.load_workbook(file_path)
         sheet = workbook.active
         company_names = []
         for row in sheet.iter_rows():
             if row[0].value == "Company Name":
                 continue
-            # if i < 19:
-            #     i = i + 1
-            #     continue
             company_name = row[0].value
         # for company_name in company_names:
             print(f"Searching for: {company_name}")
+            if company_name is None:
+                continue
             company_data = {
                 "name": company_name,
                 "related_business": []
@@ -123,27 +228,26 @@ def main():
                     driver.switch_to.window(original_window)
                     original_window = driver.current_window_handle
                     if business_data.get('url',None) is not None:
-                        if business_data['url'] not in ['instagram', 'facebook' , 'goo.gl', "sites.google.com"]:
-                            driver.execute_script("window.open(arguments[0], '_blank');", f'https://www.skymem.info/srch?q={business_data["url"]}')
-                            WebDriverWait(driver, 10).until(EC.number_of_windows_to_be(2))
-                            time.sleep(3)
-                            for window_handle in driver.window_handles:
-                                if window_handle != original_window:
-                                    driver.switch_to.window(window_handle)
-                                    break
-                            try:
-                                table = driver.find_element(By.TAG_NAME,"table")
-                                emails = table.find_elements(By.TAG_NAME,"a")
-                            except:
-                                # driver.close()
-                                emails = []
-                                pass
-                            emails_list = []
-                            for email in emails :
-                                emails_list.append(email.text)
-                            # if len(emails_list) > 0:
-                            driver.close()
-                            business_data['emails'] = emails_list
+                        driver.execute_script("window.open(arguments[0], '_blank');", f'https://www.skymem.info/srch?q={business_data["url"]}')
+                        WebDriverWait(driver, 10).until(EC.number_of_windows_to_be(2))
+                        time.sleep(3)
+                        for window_handle in driver.window_handles:
+                            if window_handle != original_window:
+                                driver.switch_to.window(window_handle)
+                                break
+                        try:
+                            table = driver.find_element(By.TAG_NAME,"table")
+                            emails = table.find_elements(By.TAG_NAME,"a")
+                        except:
+                            # driver.close()
+                            emails = []
+                            pass
+                        emails_list = []
+                        for email in emails :
+                            emails_list.append(email.text)
+                        # if len(emails_list) > 0:
+                        driver.close()
+                        business_data['emails'] = emails_list
                     driver.switch_to.window(original_window)
                     
             except :
@@ -155,7 +259,7 @@ def main():
             save_to_json(scraped_data, "scraped_data.json")
             try:
                 phones = [el.get('phone',None) for el in  company_data["related_business"] if el.get('phone',None) is not None]
-                if len(phones) > 0:
+                if len(phones) < 0:
                     phones = "غير موجود"
                 else:
                     phones = "\n".join(phones)
@@ -164,7 +268,7 @@ def main():
             row[1].value = phones
             try:
                 emails = {email for el in company_data["related_business"] for email in el.get('emails', [])}
-                if len(emails) > 0:
+                if len(emails) < 0:
                     emails = "غير موجود"
                 else:
                     emails = "\n".join(emails)
@@ -173,7 +277,7 @@ def main():
             row[2].value = emails
             try:
                 websites = [el.get('url',None) for el in  company_data["related_business"] if el.get('url',None) is not None]
-                if len(websites) > 0:
+                if len(websites) < 0:
                     websites = "غير موجود"
                 else:
                     websites = "\n".join(websites)
@@ -182,13 +286,49 @@ def main():
             row[3].value = websites
             try:
                 google_map_links = [el.get('google_map_link',None) for el in  company_data["related_business"]]
-                if len(google_map_links) > 0:
+                if len(google_map_links) < 0:
                     google_map_links = "غير موجود"
                 else:
                     google_map_links = "\n".join(google_map_links)
             except:
                 google_map_links = "غير موجود"
             row[4].value = google_map_links
+            # try:
+            try:
+                print("Processing social media accounts...")
+                # Assuming `websites` is a string of newline-separated URLs
+                websites = websites.split('\n')  # Replace `websites` with actual data
+                social_media_results = collect_social_media_accounts("\n".join(websites))
+                
+                # Access dictionary keys directly
+                for index in range(5, 11):
+                    if index == 5:
+                        facebooks = social_media_results.get("facebook", "")
+                        facebooks = "\n".join(facebooks)
+                        row[5].value = facebooks
+                    elif index == 6:
+                        linkedns = social_media_results.get("linkedin", "")
+                        linkedns = "\n".join(linkedns)
+                        row[6].value = linkedns
+                    elif index == 7:
+                        twitters = social_media_results.get("twitter", "")
+                        twitters = "\n".join(twitters)
+                        row[7].value = twitters
+                    elif index == 8:
+                        instagrams = social_media_results.get("instagram", "")
+                        instagrams = "\n".join(instagrams)
+                        row[8].value = instagrams
+                    elif index == 9:
+                        snapchats = social_media_results.get("snapchat", "")
+                        snapchats = "\n".join(snapchats)
+                        row[9].value = snapchats
+                    else:
+                        others = social_media_results.get("other", "")
+                        others = "\n".join(others)
+                        row[10].value = others
+            except Exception as e:
+                pass
+
             workbook.save(file_path)
             time.sleep(10)
             driver.get("https://www.google.com/maps")

@@ -127,8 +127,6 @@ def extract_related_business(driver):
                 related_business['url'] = None
             else:
                 related_business["url"] = text.split('\n')[1]
-            print("here >")
-            print(related_business["url"])
     return related_business
 
 def save_to_json(data, file_name):
@@ -162,11 +160,16 @@ def get_social_media(url):
     }}
     """
     try:
-        response = openai.ChatCompletion.create(
-            model="gpt-4",
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return response['choices'][0]['message']['content']
+        if url is not None:
+            response = openai.ChatCompletion.create(
+                model="gpt-4",
+                messages=[{"role": "user", "content": prompt}]
+            )
+            return response['choices'][0]['message']['content']
+        return {
+            "company_url": url,
+            "error": f"Error fetching data: {str(e)}"
+        }
     except Exception as e:
         return {
             "company_url": url,
